@@ -12,6 +12,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -49,10 +51,22 @@ func main() {
 
 	h := auth.NewHandler(svc)
 
-	srv := server.New(mux, cfg.Server)
-	auth.RegisterRoutes(mux, h, v)
-
-	if err := server.Start(srv); err != nil {
-		log.Fatalf("Error starting server: %s", err)
+	serverConfig := &server.Config{
+		Addr:            cfg.Server.Addr,
+		ReadTimeout:     cfg.Server.ReadTimeout,
+		WriteTimeout:    cfg.Server.WriteTimeout,
+		IdleTimeout:     cfg.Server.IdleTimeout,
+		ShutdownTimeout: 10 * time.Second,
 	}
+
+	srv := server.New(serverConfig, mux)
+	auth.RegisterRoutes(mux, h, v)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := srv.Serve(ctx); err != nil {
+		log.Fatalf("server exited with error: %v", err)
+	}
+
+	log.Println("server stopped gracefully")
 }
