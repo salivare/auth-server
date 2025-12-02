@@ -19,11 +19,14 @@ import (
 
 func main() {
 	ctx := context.Background()
+
+	// Init config
 	cfg, confErr := config.LoadConfig()
 	if confErr != nil {
 		log.Fatal(confErr)
 	}
 
+	// Init Storage
 	dsn := os.Getenv("SQLITE_DSN")
 	if dsn == "" {
 		dsn = "file:auth.db?_foreign_keys=1"
@@ -36,19 +39,22 @@ func main() {
 		db.Close()
 	}()
 
-	v := validator.New()
-	mux := http.NewServeMux()
-
 	userStore := sqlite.NewUserRepo(db)
 	tokenStore := sqlite.NewTokenStore(db)
 
+	// Create Token Manager
 	secret := []byte(cfg.Token.Secret)
 	accessTTL := time.Minute * 15
 	refreshTTL := time.Hour * 24
 	tokenManager := token.NewManager(secret, accessTTL)
 
+	// Init service
 	svc := service.NewAuthService(userStore, tokenStore, tokenManager, refreshTTL)
 
+	// Init and serve http Server
+	v := validator.New()
+	mux := http.NewServeMux()
+	// Init handlers
 	h := auth.NewHandler(svc)
 
 	serverConfig := &server.Config{
@@ -64,8 +70,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := srv.Serve(ctx); err != nil {
-		log.Fatalf("server exited with error: %v", err)
+	if serveErr := srv.Serve(ctx); serveErr != nil {
+		log.Fatalf("server exited with error: %v", serveErr)
 	}
 
 	log.Println("server stopped gracefully")
