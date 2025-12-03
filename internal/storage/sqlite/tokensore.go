@@ -9,18 +9,15 @@ import (
 	"github.com/salivare/auth-server/pkg/model"
 )
 
-var _ storage.RefreshTokenRepository = (*TokenStore)(nil)
+var _ storage.RefreshTokenRepository = (*tokenRepository)(nil)
 
-type TokenStore struct {
-	db *sql.DB
+type tokenRepository struct {
+	s *Storage
 }
 
-func NewTokenStore(db *sql.DB) *TokenStore {
-	return &TokenStore{db: db}
-}
-
-func (ts TokenStore) Save(ctx context.Context, token model.RefreshToken) error {
-	_, err := ts.db.ExecContext(
+func (ts *tokenRepository) Save(ctx context.Context, token model.RefreshToken) error {
+	conn := ts.s.connector(ctx)
+	_, err := conn.ExecContext(
 		ctx,
 		"INSERT INTO refresh_token(token_hash, user_id, expires_at, create_at) VALUES (?,?,?,?)",
 		token.TokenHash,
@@ -36,10 +33,12 @@ func (ts TokenStore) Save(ctx context.Context, token model.RefreshToken) error {
 	return nil
 }
 
-func (ts TokenStore) FindByHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error) {
+func (ts *tokenRepository) FindByHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error) {
+	conn := ts.s.connector(ctx)
+
 	var t model.RefreshToken
 
-	row := ts.db.QueryRowContext(
+	row := conn.QueryRowContext(
 		ctx,
 		`SELECT token_hash, user_id,expires_at, create_at FROM refresh_token WHERE token_hash = ? LIMIT 1`,
 		tokenHash,
@@ -47,15 +46,17 @@ func (ts TokenStore) FindByHash(ctx context.Context, tokenHash string) (*model.R
 
 	if err := row.Scan(&t.TokenHash, &t.UserID, &t.ExpiresAt, &t.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return &model.RefreshToken{}, ErrNotFound
+			return &model.RefreshToken{}, storage.ErrTokenNotFound
 		}
 		return &model.RefreshToken{}, fmt.Errorf("query no token hash: %w", err)
 	}
 	return &t, nil
 }
 
-func (ts TokenStore) DeleteByHash(ctx context.Context, tokenHash string) error {
-	_, err := ts.db.ExecContext(
+func (ts *tokenRepository) DeleteByHash(ctx context.Context, tokenHash string) error {
+	conn := ts.s.connector(ctx)
+
+	_, err := conn.ExecContext(
 		ctx,
 		"DELETE FROM refresh_token WHERE token_hash = ?",
 		tokenHash,

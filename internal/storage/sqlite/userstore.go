@@ -10,22 +10,18 @@ import (
 	"time"
 )
 
-var _ storage.UserRepository = (*UserRepo)(nil)
+var _ storage.UserRepository = (*userRepository)(nil)
 
-var ErrNotFound = errors.New("not found")
-
-type UserRepo struct {
-	db *sql.DB
+type userRepository struct {
+	s *Storage
 }
 
-func NewUserRepo(db *sql.DB) *UserRepo {
-	return &UserRepo{db: db}
-}
+func (r *userRepository) Save(ctx context.Context, u model.User) (model.User, error) {
+	conn := r.s.connector(ctx)
 
-func (r *UserRepo) Save(ctx context.Context, u model.User) (model.User, error) {
 	if u.ID == 0 {
 		now := time.Now().UTC()
-		res, err := r.db.ExecContext(
+		res, err := conn.ExecContext(
 			ctx,
 			"INSERT INTO users(email,password,create_at) VALUES (?,?,?)",
 			u.Email,
@@ -45,7 +41,7 @@ func (r *UserRepo) Save(ctx context.Context, u model.User) (model.User, error) {
 		return u, nil
 	}
 
-	_, err := r.db.ExecContext(
+	_, err := conn.ExecContext(
 		ctx,
 		"UPDATE users SET password=? WHERE id=?",
 		u.PasswordHash,
@@ -54,10 +50,12 @@ func (r *UserRepo) Save(ctx context.Context, u model.User) (model.User, error) {
 	return u, err
 }
 
-func (r *UserRepo) GetByEmail(ctx context.Context, email string) (model.User, error) {
+func (r *userRepository) GetByEmail(ctx context.Context, email string) (model.User, error) {
+	conn := r.s.connector(ctx)
+
 	var u model.User
 
-	row := r.db.QueryRowContext(
+	row := conn.QueryRowContext(
 		ctx,
 		`SELECT id, email, password, create_at FROM users WHERE email = ? LIMIT 1`,
 		email,
@@ -65,15 +63,16 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (model.User, er
 
 	if err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreateAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return model.User{}, ErrNotFound
+			return model.User{}, storage.ErrUserNotFound
 		}
 		return model.User{}, fmt.Errorf("query user by email: %w", err)
 	}
 	return u, nil
 }
 
-func (r *UserRepo) List(ctx context.Context) ([]model.User, error) {
-	rows, err := r.db.QueryContext(
+func (r *userRepository) List(ctx context.Context) ([]model.User, error) {
+	conn := r.s.connector(ctx)
+	rows, err := conn.QueryContext(
 		ctx,
 		"SELECT id, email, password, create_at FROM users ORDER BY id",
 	)
