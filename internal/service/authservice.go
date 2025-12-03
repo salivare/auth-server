@@ -62,12 +62,12 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (str
 				Email:        email,
 				PasswordHash: hashed,
 			}
-			created, err := s.storage.Users().Save(ctxTx, u) // Используем ctxTx
+			created, err := s.storage.Users().Save(ctxTx, u)
 			if err != nil {
 				return err
 			}
 
-			accessToken, refreshToken, err = s.GenerateUserSession(ctxTx, created.ID) // Используем ctxTx
+			accessToken, refreshToken, err = s.GenerateUserSession(ctxTx, created.ID)
 			if err != nil {
 				return err
 			}
