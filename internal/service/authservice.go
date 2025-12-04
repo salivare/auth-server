@@ -19,60 +19,73 @@ var (
 type User = model.User
 
 type AuthService struct {
-	userStore       storage.UserRepository
-	tokenStore      storage.RefreshTokenRepository
+	storage         storage.Storage
 	tokenManager    token.Manager
 	refreshTokenTTL time.Duration
 }
 
 func NewAuthService(
-	userStore storage.UserRepository,
-	tokenStore storage.RefreshTokenRepository,
+	storage storage.Storage,
 	tokenManager token.Manager,
 	refreshTokenTTL time.Duration,
 ) *AuthService {
 	return &AuthService{
-		userStore:       userStore,
-		tokenStore:      tokenStore,
+		storage:         storage,
 		tokenManager:    tokenManager,
 		refreshTokenTTL: refreshTokenTTL,
 	}
 }
 
 func (s *AuthService) Register(ctx context.Context, email, password string) (string, string, error) {
-	_, err := s.userStore.GetByEmail(ctx, email)
-	if err == nil {
-		return "", "", ErrUserExists
-	}
+	var accessToken, refreshToken string
 
-	if errors.Is(err, ErrNotFound) {
-		return "", "", err
-	}
+	err := s.storage.RunInTx(
+		ctx, func(ctxTx context.Context) error {
+			_, err := s.storage.Users().GetByEmail(ctxTx, email)
+			if err == nil {
+				return ErrUserExists
+			}
+			if !errors.Is(err, storage.ErrUserNotFound) {
+				return err
+			}
 
-	if len(password) < 6 {
-		return "", "", errors.New("password too short")
-	}
+			if len(password) < 6 {
+				return errors.New("password too short")
+			}
 
-	hashed, err := hashPassword(password)
+			hashed, err := hashPassword(password)
+			if err != nil {
+				return err
+			}
+
+			u := User{
+				Email:        email,
+				PasswordHash: hashed,
+			}
+			created, err := s.storage.Users().Save(ctxTx, u)
+			if err != nil {
+				return err
+			}
+
+			accessToken, refreshToken, err = s.GenerateUserSession(ctxTx, created.ID)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		},
+	)
+
 	if err != nil {
 		return "", "", err
 	}
 
-	u := User{
-		Email:        email,
-		PasswordHash: hashed,
-	}
-	created, err := s.userStore.Save(ctx, u)
-	if err != nil {
-		return "", "", err
-	}
-
-	return s.GenerateUserSession(ctx, created.ID)
+	return accessToken, refreshToken, nil
 
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
-	u, err := s.userStore.GetByEmail(ctx, email)
+	u, err := s.storage.Users().GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			return "", "", ErrNotFound
@@ -112,7 +125,7 @@ func (s *AuthService) GenerateUserSession(ctx context.Context, userId int) (stri
 		CreatedAt: time.Now(),
 	}
 
-	if err := s.tokenStore.Save(ctx, rtModel); err != nil {
+	if err := s.storage.Tokens().Save(ctx, rtModel); err != nil {
 		return "", "", err
 	}
 
@@ -126,18 +139,18 @@ func (s *AuthService) RefreshUserToken(ctx context.Context, oldPlainToken string
 		return "", "", err
 	}
 
-	rtModel, err := s.tokenStore.FindByHash(ctx, oldHash)
+	rtModel, err := s.storage.Tokens().FindByHash(ctx, oldHash)
 
 	if err != nil {
 		return "", "", errors.New("refresh token not found")
 	}
 
 	if time.Now().After(rtModel.ExpiresAt) {
-		s.tokenStore.DeleteByHash(ctx, oldHash)
+		s.storage.Tokens().DeleteByHash(ctx, oldHash)
 		return "", "", token.ErrInvalidRefreshToken
 	}
 
-	DelTErr := s.tokenStore.DeleteByHash(ctx, oldHash)
+	DelTErr := s.storage.Tokens().DeleteByHash(ctx, oldHash)
 	if DelTErr != nil {
 		// log
 	}
