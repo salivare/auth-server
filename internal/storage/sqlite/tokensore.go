@@ -9,13 +9,15 @@ import (
 	"github.com/salivare/auth-server/pkg/model"
 )
 
-var _ storage.RefreshTokenRepository = (*tokenRepository)(nil)
-
-type tokenRepository struct {
+type TokenRepository struct {
 	s *Storage
 }
 
-func (ts *tokenRepository) Save(ctx context.Context, token model.RefreshToken) error {
+func NewTokenRepository(s *Storage) *TokenRepository {
+	return &TokenRepository{s: s}
+}
+
+func (ts *TokenRepository) Save(ctx context.Context, token model.RefreshToken) error {
 	conn := ts.s.connector(ctx)
 	_, err := conn.ExecContext(
 		ctx,
@@ -33,7 +35,7 @@ func (ts *tokenRepository) Save(ctx context.Context, token model.RefreshToken) e
 	return nil
 }
 
-func (ts *tokenRepository) FindByHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error) {
+func (ts *TokenRepository) FindByHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error) {
 	conn := ts.s.connector(ctx)
 
 	var t model.RefreshToken
@@ -53,7 +55,7 @@ func (ts *tokenRepository) FindByHash(ctx context.Context, tokenHash string) (*m
 	return &t, nil
 }
 
-func (ts *tokenRepository) DeleteByHash(ctx context.Context, tokenHash string) error {
+func (ts *TokenRepository) DeleteByHash(ctx context.Context, tokenHash string) error {
 	conn := ts.s.connector(ctx)
 
 	_, err := conn.ExecContext(

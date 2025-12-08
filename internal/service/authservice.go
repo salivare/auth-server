@@ -18,30 +18,53 @@ var (
 
 type User = model.User
 
+type UserRepo interface {
+	Save(ctx context.Context, u model.User) (model.User, error)
+	GetByEmail(ctx context.Context, email string) (model.User, error)
+}
+
+type RefreshTokenRepo interface {
+	Save(ctx context.Context, token model.RefreshToken) error
+	FindByHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error)
+	DeleteByHash(ctx context.Context, tokenHash string) error
+}
+
+type TxManager interface {
+	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+type Config struct {
+	Users           UserRepo
+	Tokens          RefreshTokenRepo
+	Tx              TxManager
+	TokenManager    token.Manager
+	RefreshTokenTTL time.Duration
+}
+
 type AuthService struct {
-	storage         storage.Storage
+	users           UserRepo
+	tokens          RefreshTokenRepo
+	tx              TxManager
 	tokenManager    token.Manager
 	refreshTokenTTL time.Duration
 }
 
-func NewAuthService(
-	storage storage.Storage,
-	tokenManager token.Manager,
-	refreshTokenTTL time.Duration,
-) *AuthService {
+func NewAuthService(cfg Config) *AuthService {
 	return &AuthService{
-		storage:         storage,
-		tokenManager:    tokenManager,
-		refreshTokenTTL: refreshTokenTTL,
+		users:           cfg.Users,
+		tokens:          cfg.Tokens,
+		tx:              cfg.Tx,
+		tokenManager:    cfg.TokenManager,
+		refreshTokenTTL: cfg.RefreshTokenTTL,
 	}
 }
 
 func (s *AuthService) Register(ctx context.Context, email, password string) (string, string, error) {
 	var accessToken, refreshToken string
 
-	err := s.storage.RunInTx(
+	err := s.tx.RunInTx(
 		ctx, func(ctxTx context.Context) error {
-			_, err := s.storage.Users().GetByEmail(ctxTx, email)
+			_, err := s.users.GetByEmail(ctxTx, email)
 			if err == nil {
 				return ErrUserExists
 			}
@@ -62,7 +85,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (str
 				Email:        email,
 				PasswordHash: hashed,
 			}
-			created, err := s.storage.Users().Save(ctxTx, u)
+			created, err := s.users.Save(ctxTx, u)
 			if err != nil {
 				return err
 			}
@@ -85,7 +108,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (str
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
-	u, err := s.storage.Users().GetByEmail(ctx, email)
+	u, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			return "", "", ErrNotFound
@@ -125,7 +148,7 @@ func (s *AuthService) GenerateUserSession(ctx context.Context, userId int) (stri
 		CreatedAt: time.Now(),
 	}
 
-	if err := s.storage.Tokens().Save(ctx, rtModel); err != nil {
+	if err := s.tokens.Save(ctx, rtModel); err != nil {
 		return "", "", err
 	}
 
@@ -139,18 +162,18 @@ func (s *AuthService) RefreshUserToken(ctx context.Context, oldPlainToken string
 		return "", "", err
 	}
 
-	rtModel, err := s.storage.Tokens().FindByHash(ctx, oldHash)
+	rtModel, err := s.tokens.FindByHash(ctx, oldHash)
 
 	if err != nil {
 		return "", "", errors.New("refresh token not found")
 	}
 
 	if time.Now().After(rtModel.ExpiresAt) {
-		s.storage.Tokens().DeleteByHash(ctx, oldHash)
+		s.tokens.DeleteByHash(ctx, oldHash)
 		return "", "", token.ErrInvalidRefreshToken
 	}
 
-	DelTErr := s.storage.Tokens().DeleteByHash(ctx, oldHash)
+	DelTErr := s.tokens.DeleteByHash(ctx, oldHash)
 	if DelTErr != nil {
 		// log
 	}

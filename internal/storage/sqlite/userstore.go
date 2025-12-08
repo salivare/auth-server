@@ -10,13 +10,15 @@ import (
 	"time"
 )
 
-var _ storage.UserRepository = (*userRepository)(nil)
-
-type userRepository struct {
+type UserRepository struct {
 	s *Storage
 }
 
-func (r *userRepository) Save(ctx context.Context, u model.User) (model.User, error) {
+func NewUserRepository(s *Storage) *UserRepository {
+	return &UserRepository{s: s}
+}
+
+func (r *UserRepository) Save(ctx context.Context, u model.User) (model.User, error) {
 	conn := r.s.connector(ctx)
 
 	if u.ID == 0 {
@@ -50,7 +52,7 @@ func (r *userRepository) Save(ctx context.Context, u model.User) (model.User, er
 	return u, err
 }
 
-func (r *userRepository) GetByEmail(ctx context.Context, email string) (model.User, error) {
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (model.User, error) {
 	conn := r.s.connector(ctx)
 
 	var u model.User
@@ -70,7 +72,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (model.Us
 	return u, nil
 }
 
-func (r *userRepository) List(ctx context.Context) ([]model.User, error) {
+func (r *UserRepository) List(ctx context.Context) ([]model.User, error) {
 	conn := r.s.connector(ctx)
 	rows, err := conn.QueryContext(
 		ctx,
