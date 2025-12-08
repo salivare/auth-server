@@ -4,16 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/salivare/auth-server/internal/storage"
 )
 
-type sqlTxManager struct {
+type SQLTxManager struct {
 	db *sql.DB
 }
 
 // NewTxManager creates a new transaction manager instance.
-func NewTxManager(db *sql.DB) storage.TxManager {
-	return &sqlTxManager{db: db}
+func NewTxManager(db *sql.DB) *SQLTxManager {
+	return &SQLTxManager{db: db}
 }
 
 type contextKey string
@@ -21,7 +20,7 @@ type contextKey string
 const txKey contextKey = "tx"
 
 // RunInTx initiates transaction
-func (m *sqlTxManager) RunInTx(ctx context.Context, fn func(ctx context.Context) error) error {
+func (m *SQLTxManager) RunInTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("sqlite: failed to begin transaction: %w", err)

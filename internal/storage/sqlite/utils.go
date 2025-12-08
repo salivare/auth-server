@@ -3,9 +3,9 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"github.com/salivare/auth-server/internal/storage"
 )
 
+// DBConnector оставляем как есть
 type DBConnector interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
@@ -15,29 +15,29 @@ type DBConnector interface {
 // Storage struct
 type Storage struct {
 	db *sql.DB
-	sqlTxManager
-	users  userRepository
-	tokens tokenRepository
+	SQLTxManager
+	users  UserRepository
+	tokens TokenRepository
 }
 
-// NewStorage constructor
-func NewStorage(db *sql.DB) storage.Storage {
+// NewStorage constructor — возвращаем конкретный тип
+func NewStorage(db *sql.DB) *Storage {
 	s := &Storage{
 		db:           db,
-		sqlTxManager: sqlTxManager{db: db},
+		SQLTxManager: SQLTxManager{db: db},
 	}
 
-	s.users = userRepository{s: s}
-	s.tokens = tokenRepository{s: s}
+	s.users = UserRepository{s: s}
+	s.tokens = TokenRepository{s: s}
 
 	return s
 }
 
-func (s *Storage) Users() storage.UserRepository {
+func (s *Storage) Users() *UserRepository {
 	return &s.users
 }
 
-func (s *Storage) Tokens() storage.RefreshTokenRepository {
+func (s *Storage) Tokens() *TokenRepository {
 	return &s.tokens
 }
 

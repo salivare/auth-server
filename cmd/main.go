@@ -39,7 +39,11 @@ func main() {
 		db.Close()
 	}()
 
+	// Init storage
 	store := sqlite.NewStorage(db)
+	var usersRepo service.UserRepo = store.Users()
+	var tokensRepo service.RefreshTokenRepo = store.Tokens()
+	var txMgr service.TxManager = &store.SQLTxManager
 
 	// Create Token Manager
 	secret := []byte(cfg.Token.Secret)
@@ -47,8 +51,17 @@ func main() {
 	refreshTTL := time.Hour * 24
 	tokenManager := token.NewManager(secret, accessTTL)
 
+	// Create service cfg
+	authCfg := service.Config{
+		Users:           usersRepo,
+		Tokens:          tokensRepo,
+		Tx:              txMgr,
+		TokenManager:    tokenManager,
+		RefreshTokenTTL: refreshTTL,
+	}
+
 	// Init service
-	svc := service.NewAuthService(store, tokenManager, refreshTTL)
+	svc := service.NewAuthService(authCfg)
 
 	// Init and serve http Server
 	v := validator.New()
