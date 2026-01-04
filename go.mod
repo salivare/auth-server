@@ -9,6 +9,7 @@ require (
 	github.com/knadh/koanf/providers/file v1.2.0
 	github.com/knadh/koanf/v2 v2.3.0
 	github.com/mattn/go-sqlite3 v1.14.32
+	go.uber.org/mock v0.6.0
 	golang.org/x/crypto v0.44.0
 )
 

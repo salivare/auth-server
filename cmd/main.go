@@ -40,10 +40,10 @@ func main() {
 	}()
 
 	// Init storage
-	store := sqlite.NewStorage(db)
-	var usersRepo service.UserRepo = store.Users()
-	var tokensRepo service.RefreshTokenRepo = store.Tokens()
-	var txMgr service.TxManager = &store.SQLTxManager
+	sqliteStore := sqlite.NewStorage(db)
+	var usersRepo service.Authentication = sqliteStore.Users()
+	var tokensRepo service.RefreshTokenRepo = sqliteStore.Tokens()
+	var txMgr service.TxManager = &sqliteStore.SQLTxManager
 
 	// Create Token Manager
 	secret := []byte(cfg.Token.Secret)
@@ -52,8 +52,8 @@ func main() {
 	tokenManager := token.NewManager(secret, accessTTL)
 
 	// Create service cfg
-	authCfg := service.Config{
-		Users:           usersRepo,
+	authCfg := service.AuthConfig{
+		Authentication:  usersRepo,
 		Tokens:          tokensRepo,
 		Tx:              txMgr,
 		TokenManager:    tokenManager,
@@ -62,6 +62,11 @@ func main() {
 
 	// Init service
 	svc := service.NewAuthService(authCfg)
+
+	usersCfg := service.UsersConfig{
+		Users: usersRepo,
+	}
+	_ = service.NewUsersService(usersCfg)
 
 	// Init and serve http Server
 	v := validator.New()
