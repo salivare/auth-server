@@ -5,11 +5,11 @@ go 1.25.3
 require (
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/golang-migrate/migrate v3.5.4+incompatible
 	github.com/knadh/koanf/parsers/yaml v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.0
 	github.com/knadh/koanf/v2 v2.3.0
 	github.com/mattn/go-sqlite3 v1.14.32
-	go.uber.org/mock v0.6.0
 	golang.org/x/crypto v0.44.0
 )
 
