@@ -18,7 +18,8 @@ var (
 
 type User = model.User
 
-type UserRepo interface {
+//go:generate sh -c "mkdir -p ./mocks && go run github.com/vektra/mockery/v3@v3.6.1 --name=Authentication --dir=. --output=./mocks --outpkg=mocks"
+type Authentication interface {
 	Save(ctx context.Context, u model.User) (model.User, error)
 	GetByEmail(ctx context.Context, email string) (model.User, error)
 }
@@ -33,8 +34,8 @@ type TxManager interface {
 	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-type Config struct {
-	Users           UserRepo
+type AuthConfig struct {
+	Authentication  Authentication
 	Tokens          RefreshTokenRepo
 	Tx              TxManager
 	TokenManager    token.Manager
@@ -42,16 +43,16 @@ type Config struct {
 }
 
 type AuthService struct {
-	users           UserRepo
+	authentication  Authentication
 	tokens          RefreshTokenRepo
 	tx              TxManager
 	tokenManager    token.Manager
 	refreshTokenTTL time.Duration
 }
 
-func NewAuthService(cfg Config) *AuthService {
+func NewAuthService(cfg AuthConfig) *AuthService {
 	return &AuthService{
-		users:           cfg.Users,
+		authentication:  cfg.Authentication,
 		tokens:          cfg.Tokens,
 		tx:              cfg.Tx,
 		tokenManager:    cfg.TokenManager,
@@ -64,7 +65,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (str
 
 	err := s.tx.RunInTx(
 		ctx, func(ctxTx context.Context) error {
-			_, err := s.users.GetByEmail(ctxTx, email)
+			_, err := s.authentication.GetByEmail(ctxTx, email)
 			if err == nil {
 				return ErrUserExists
 			}
@@ -85,7 +86,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (str
 				Email:        email,
 				PasswordHash: hashed,
 			}
-			created, err := s.users.Save(ctxTx, u)
+			created, err := s.authentication.Save(ctxTx, u)
 			if err != nil {
 				return err
 			}
@@ -108,7 +109,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (str
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
-	u, err := s.users.GetByEmail(ctx, email)
+	u, err := s.authentication.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			return "", "", ErrNotFound

@@ -1,0 +1,19 @@
+version: "3.8"
+services:
+  sso-auth-server:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    container_name: sso-auth-server
+    restart: always
+    environment:
+      - CFG_APP_YAML_PATCH=/app_config/appexample.yaml
+    volumes:
+      - logs:/var/log
+      - dbdata:/data
+    ports:
+      - "8080:8080"
+
+volumes:
+  logs:
+  dbdata:
